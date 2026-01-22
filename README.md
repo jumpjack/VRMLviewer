@@ -36,7 +36,9 @@ View ancient VRML 1.0 and VRML 2.0 files and convert them into modern GLTB forma
 ### Recovered vrml models
 - [https://win98.altervista.org/pathfinder/](https://win98.altervista.org/pathfinder/)
 
-###
+### Models on sketchfab
 - [Pathfinder landing site on Sketchfab](https://sketchfab.com/3d-models/nasa-pathfinder-landing-site-1997-f442cd26d4ce46f488c2f3bcac90c002)
 
-
+## Warnings
+- Some complex files are not supported and can cause a neverending loading; in this case, close/refresh page and try a different file.
+- Animations not supported
