@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>NASA VRML Ultimate Explorer</title>
+    <!-- Caricamento Librerie Locali -->
+    <script src="babylon.js"></script>
+    <script src="babylonjs.materials.min.js"></script>
+    <script src="babylonjs.serializers.min.js"></script>
+    <script src="pako.min.js"></script>
+    <script src="jszip.min.js"></script>
+
+    <link rel="stylesheet" href="vrml-tools.css">
+</head>
+<body>
+
+<div id="ui">
+    <h3>NASA VRML Ultimate Explorer</h3>
+
+    <!-- 1. CARICAMENTO ZIP (Spostato in alto) -->
+    <div class="section">
+        <label>1. CARICA ZIP</label>
+        <input type="file" id="fileZipLoc" accept=".zip,.wrl,.wrz" onchange="handleFileUpload()" style="width:100%">
+    </div>
+
+    <!-- AREA INFO FILE (Nuova) -->
+    <div id="file-header-info">
+        <div><span class="info-label">VERSIONE:</span> <span id="info-ver">-</span></div>
+        <div><span class="info-label">FILE:</span> <span id="info-name">-</span></div>
+        <div><span class="info-label">TITOLO:</span> <span id="info-title">-</span></div>
+    </div>
+
+<div id="root-selection-area" class="section" style="display:none">
+        <label>2. MAPPATURA & RADICE</label>
+
+        <!-- Barra di progresso -->
+        <div id="progress-bar-wrap"><div id="progress-bar-fill"></div></div>
+
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:5px; margin-bottom:10px;">
+            <select id="mapX"><option value="X+">X+</option><option value="X-">X-</option><option value="Y+">Y+</option><option value="Y-">Y-</option><option value="Z+">Z+</option><option value="Z-">Z-</option></select>
+            <select id="mapY"><option value="X+">X+</option><option value="X-">X-</option><option value="Y+">Y+</option><option value="Y-">Y-</option><option value="Z+">Z+</option><option value="Z-">Z-</option></select>
+            <select id="mapZ"><option value="X+">X+</option><option value="X-">X-</option><option value="Y+">Y+</option><option value="Y-">Y-</option><option value="Z+">Z+</option><option value="Z-">Z-</option></select>
+        </div>
+
+        <!-- Pulsanti Rotazione 90° -->
+        <div class="rot-btn-group">
+            <button class="btn-rot" onclick="rotateRoot('x')">Ruota X 90°</button>
+            <button class="btn-rot" onclick="rotateRoot('y')">Ruota Y 90°</button>
+            <button class="btn-rot" onclick="rotateRoot('z')">Ruota Z 90°</button>
+        </div>
+
+        <select id="rootSelect" style="width:100%; margin-top:10px;" onchange="autoDetectVersion()"></select>
+        <button class="btn-main" onclick="startAnalysis()">CARICA E VISUALIZZA</button>
+    </div>
+    <div class="section">
+        <label>GESTIONE SCENA</label>
+        <div style="display:flex; gap:5px; flex-wrap: wrap;">
+            <button onclick="camera.setTarget(BABYLON.Vector3.Zero())" style="flex:1">Origine (0,0,0)</button>
+            <label style="flex:1; display:flex; align-items:center; background:#eee; padding:5px; border-radius:4px; font-size:0.8em">
+                <input type="checkbox" id="showAxes" checked onchange="toggleAxes()"> Assi
+            </label>
+        </div>
+    </div>
+
+    <div class="section" style="display: flex; gap:10px;">
+        <button class="btn-export" onclick="exportToGLB()">Esporta GLB</button>
+        <button class="btn-export" style="background:#6f42c1" onclick="exportConfig()">Esporta Config</button>
+    </div>
+
+    <div class="section">
+        <label>STRUTTURA FILE (Tasto DX per opzioni)</label>
+        <div id="tree-container">In attesa dello ZIP...</div>
+    </div>
+</div>
+
+<div id="context-menu">
+    <div onclick="menuAction('view')">📄 Visualizza</div>
+    <div onclick="menuAction('show')">🎯 Mostra Solo</div>
+    <div onclick="menuAction('hide')">🚫 Nascondi</div>
+    <div onclick="menuAction('all')">👁️ Mostra Tutti</div>
+    <div onclick="menuAction('translate')">➕ Trasla</div>
+    <div onclick="menuAction('rotate')">🔄 Ruota</div>
+    <div onclick="menuAction('replace')">📂 Sostituisci</div>
+</div>
+
+<div id="notepad">
+    <div id="notepad-header"><strong id="notepad-title">Notepad</strong><button onclick="closeNotepad()" style="background:red; color:white; border:none; padding:5px 15px; cursor:pointer;">X</button></div>
+    <div id="notepad-content">
+        <div id="notepad-text"></div>
+        <img id="notepad-img" src="">
+    </div>
+</div>
+
+<input type="file" id="replaceInput" style="display:none" onchange="handleReplacement(event)">
+<canvas id="renderCanvas"></canvas>
+
+<!-- Caricamento Script Principale Separato -->
+<script src="vrml-scene.js"></script>
+<script src="vrml-io.js"></script>
+<script src="vrml-engine.js"></script>
+
+</body>
+</html>
