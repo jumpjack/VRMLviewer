@@ -17,7 +17,11 @@ View ancient VRML 1.0 and VRML 2.0 files and convert them into modern GLTB forma
 ## Demo files
 
 ### NASA Pathfinder/Sojourner mission (1997)
-- altitude50k - Landing site colored by terrain altitude
+- [altitude50k](https://github.com/jumpjack/VRMLviewer/blob/main/altitude_50K.zip) - Landing site colored by terrain altitude
+- [pi1246924519_007006045l.wrz](https://github.com/jumpjack/VRMLviewer/blob/main/pi1246924519_007006045l.wrz)
+- [lander2.wrl](https://github.com/jumpjack/VRMLviewer/blob/main/lander2.wrl)
+- [terrain_full_80k.wrl](https://github.com/jumpjack/VRMLviewer/blob/main/terrain_full_80k.wrl)
+
 
 ## Resources
 
