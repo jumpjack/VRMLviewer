@@ -15,6 +15,32 @@ let selectedPath = null;
 let totalTasks = 0;
 let completedTasks = 0;
 
+// In cima al file vrml-engine.js
+window.abortAnalysis = false;
+
+function cancelAnalysis() {
+    if (confirm("Interrompere il caricamento? Le mesh già elaborate resteranno visibili.")) {
+        window.abortAnalysis = true;
+    }
+}
+
+async function startAnalysis() {
+    window.abortAnalysis = false; // Reset
+    document.getElementById("btn-stop").style.display = "block";
+    document.getElementById("btn-start").disabled = true;
+
+    document.getElementById("tree-container").innerHTML = "";
+    processedPaths.forEach(node => node.dispose());
+    processedPaths.clear();
+
+    await loadRecursive(document.getElementById("rootSelect").value, rootNode, document.getElementById("tree-container"));
+
+    document.getElementById("btn-stop").style.display = "none";
+    document.getElementById("btn-start").disabled = false;
+    updateProgress(100);
+    //focusCamera();
+}
+
 function updateProgress(percent) {
     const wrap = document.getElementById("progress-bar-wrap");
     const fill = document.getElementById("progress-bar-fill");
@@ -40,6 +66,15 @@ async function autoDetectVersion() {
             ver = "VRML 2.0 (97)";
             document.getElementById('mapX').value = 'X+'; document.getElementById('mapY').value = 'Y+'; document.getElementById('mapZ').value = 'Z+';
         }
+
+// Aggiungi questo controllo dopo il check VRML 1.0
+if (text.includes("#Inventor")) {
+    ver = "OpenInventor 2.1";
+    document.getElementById('mapX').value = 'X+';
+    document.getElementById('mapY').value = 'Y+';
+    document.getElementById('mapZ').value = 'Z+';
+}
+
         let title = "Nessun titolo trovato";
         const titleRegexV1 = /DEF\s+Title\s+Info\s*\{[^]*?string\s*"([^"]+)"/i;
         const titleRegexV2 = /TITLE\s+"([^"]+)"/i;
@@ -64,24 +99,27 @@ async function autoDetectVersion() {
 
 
 
-async function startAnalysis() {
-    document.getElementById("tree-container").innerHTML = "";
-    processedPaths.forEach(node => node.dispose());
-    processedPaths.clear();
-    completedTasks = 0;
-    updateProgress(5);
 
-    await loadRecursive(document.getElementById("rootSelect").value, rootNode, document.getElementById("tree-container"));
 
-    updateProgress(100);
-    focusCamera();
-}
 
 async function loadRecursive(path, parentBjs, uiParent) {
     const normPath = path.replace(/\\/g, '/').replace(/^\//, '');
     const fileName = normPath.split('/').pop();
-    const isWrl = normPath.toLowerCase().endsWith('.wrl') || normPath.toLowerCase().endsWith('.wrz');
+    const isWrl = normPath.toLowerCase().endsWith('.wrl') ||
+                  normPath.toLowerCase().endsWith('.wrz') ||
+                  normPath.toLowerCase().endsWith('.iv');
 
+    // --- FIX DUPLICATI: Controllo se il file è già stato processato ---
+    if (processedPaths.has(normPath) && isWrl) {
+        // Se è già presente, aggiungiamo solo una nota nell'albero e non ricarichiamo
+        const refNode = document.createElement("div");
+        refNode.className = "tree-node collapsed";
+        refNode.innerHTML = `<div class="tree-header" style="opacity:0.6"><span>•</span> 🔗 <i>${fileName} (Già caricato)</i></div>`;
+        uiParent.appendChild(refNode);
+        return;
+    }
+
+    // Creazione Nodo UI
     const nodeContainer = document.createElement("div");
     nodeContainer.className = "tree-node collapsed";
     const header = document.createElement("div");
@@ -94,12 +132,24 @@ async function loadRecursive(path, parentBjs, uiParent) {
     childrenContainer.className = "tree-children";
     nodeContainer.appendChild(childrenContainer);
 
-    header.onclick = (e) => { e.stopPropagation(); nodeContainer.classList.toggle("collapsed"); header.querySelector(".tree-toggle").innerText = nodeContainer.classList.contains("collapsed") ? "▶" : "▼"; };
-    header.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); selectedPath = normPath; document.querySelectorAll('.selected-node').forEach(n => n.classList.remove('selected-node')); header.classList.add('selected-node'); openMenu(e); };
+    header.onclick = (e) => {
+        e.stopPropagation();
+        nodeContainer.classList.toggle("collapsed");
+        header.querySelector(".tree-toggle").innerText = nodeContainer.classList.contains("collapsed") ? "▶" : "▼";
+    };
 
-    if (processedPaths.has(normPath) && isWrl) return;
+    header.oncontextmenu = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        selectedPath = normPath;
+        document.querySelectorAll('.selected-node').forEach(n => n.classList.remove('selected-node'));
+        header.classList.add('selected-node');
+        openMenu(e);
+    };
+
     if (!isWrl) return;
 
+    // Creazione contenitore 3D
     const fileContainer = new BABYLON.TransformNode(normPath, scene);
     fileContainer.parent = parentBjs;
     processedPaths.set(normPath, fileContainer);
@@ -109,25 +159,30 @@ async function loadRecursive(path, parentBjs, uiParent) {
         if (normPath.toLowerCase().endsWith(".wrz") || (data[0] === 0x1f && data[1] === 0x8b)) data = pako.ungzip(data);
         const text = new TextDecoder("utf-8").decode(data);
 
-        // Analisi Geometria Globale
-        const globalGeo = parseVRMLGeometry(text);
-        if (globalGeo.points.length > 0) {
-            const mesh = createMesh(globalGeo, fileName + "_geo");
-            mesh.parent = fileContainer;
-            const texMatch = text.match(/(?:ImageTexture|Texture2)\s*\{[^]*?(?:url|filename)\s*["']?([^"'\s>]+)["']/i);
-            if (texMatch) {
-                const texPath = resolve(normPath, texMatch[1].replace(/[\[\]"]/g, ""));
-                await applyTexture(mesh, texPath);
-                await loadRecursive(texPath, fileContainer, childrenContainer);
+        // --- SUPPORTO OPEN INVENTOR ---
+if (normPath.toLowerCase().endsWith('.iv') || text.includes("#Inventor")) {
+    console.log("🛠️ [ENGINE] Rilevato formato OpenInventor. Passo il controllo a iv-engine.js");
+    await parseIVStructure(text, normPath, fileContainer, childrenContainer);
+} else {
+            // --- ANALISI VRML STANDARD ---
+            const globalGeo = parseVRMLGeometry(text);
+            if (globalGeo.points.length > 0) {
+                const mesh = createMesh(globalGeo, fileName + "_geo");
+                mesh.parent = fileContainer;
+                const texMatch = text.match(/(?:ImageTexture|Texture2)\s*\{[^]*?(?:url|filename)\s*["']?([^"'\s>]+)["']/i);
+                if (texMatch) {
+                    const texPath = resolve(normPath, texMatch[1].replace(/[\[\]"]/g, ""));
+                    await applyTexture(mesh, texPath);
+                    await loadRecursive(texPath, fileContainer, childrenContainer);
+                }
             }
+            await parseVrmlStructure(text, normPath, fileContainer, childrenContainer);
         }
 
-        // Analisi Struttura con aggiornamento barra
-        await parseVrmlStructure(text, normPath, fileContainer, childrenContainer);
-
     } catch (e) {
+        console.error("Errore nel caricamento di:", normPath, e);
         header.style.color = "#d9534f";
-        header.querySelector(".node-label").innerText += " [MANCANTE]";
+        header.querySelector(".node-label").innerText += " [ERRORE/MANCANTE]";
     }
 }
 
@@ -162,19 +217,59 @@ async function parseVrmlStructure(text, currentPath, parentBjs, uiParent) {
         const block = extractBlock(text, earliest);
 
         if (type === "Transform" || type === "Separator" || type === "Group") {
-            const tNode = new BABYLON.TransformNode(type, scene);
-            tNode.parent = parentBjs;
+const tNode = new BABYLON.TransformNode(type, scene);
+tNode.parent = parentBjs;
 
-            const tr = block.match(/translation\s+([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)/i);
-            if (tr) tNode.position = convertCoords(parseFloat(tr[1]), parseFloat(tr[2]), parseFloat(tr[3]));
+// valori di default VRML
+let t = BABYLON.Vector3.Zero();
+let s = new BABYLON.Vector3(1, 1, 1);
+let q = BABYLON.Quaternion.Identity();
 
-            const ro = block.match(/rotation\s+([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)/i);
-            if (ro) {
-                const axis = convertCoords(parseFloat(ro[1]), parseFloat(ro[2]), parseFloat(ro[3]));
-                tNode.rotationQuaternion = BABYLON.Quaternion.RotationAxis(axis, parseFloat(ro[4]));
-            }
-            const sc = block.match(/scale\s+([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)/i);
-            if (sc) tNode.scaling = convertCoords(parseFloat(sc[1]), parseFloat(sc[2]), parseFloat(sc[3]));
+// translation
+const tr = block.match(/translation\s+([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)/i);
+if (tr) {
+    t = convertCoords(
+        parseFloat(tr[1]),
+        parseFloat(tr[2]),
+        parseFloat(tr[3])
+    );
+}
+
+// rotation (asse + angolo)
+const ro = block.match(/rotation\s+([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)/i);
+if (ro) {
+    const axis = convertCoords(
+        parseFloat(ro[1]),
+        parseFloat(ro[2]),
+        parseFloat(ro[3])
+    ).normalize();
+    q = BABYLON.Quaternion.RotationAxis(axis, parseFloat(ro[4]));
+}
+
+// scale
+const sc = block.match(/scale\s+([-\d.eE]+)\s+([-\d.eE]+)\s+([-\d.eE]+)/i);
+if (sc) {
+    s = convertCoords(
+        parseFloat(sc[1]),
+        parseFloat(sc[2]),
+        parseFloat(sc[3])
+    );
+}
+
+// MATRICE VRML: T * R * S
+const m = BABYLON.Matrix.Compose(s, q, t);
+
+// applica come pre-transform (fondamentale)
+tNode.setPreTransformMatrix(m);
+
+tNode.position.set(0, 0, 0);
+tNode.scaling.set(1, 1, 1);
+tNode.rotationQuaternion = BABYLON.Quaternion.Identity();
+
+// forza Babylon a NON decomporre
+tNode._usePivotMatrixForWorldMatrix = true;
+tNode.computeWorldMatrix(true);
+
 
             await parseVrmlStructure(block, currentPath, tNode, uiParent);
         }
@@ -192,12 +287,21 @@ async function parseVrmlStructure(text, currentPath, parentBjs, uiParent) {
                 }
             }
         }
-        else if (type === "WWWInline" || type === "Inline") {
-            const urlMatch = block.match(/(?:name|url)\s*["']?([^"'\s>]+)["']/i);
-            if (urlMatch) await loadRecursive(resolve(currentPath, urlMatch[1]), parentBjs, uiParent);
-        }
+else if (type === "WWWInline" || type === "Inline") {
+    const urlMatch = block.match(/(?:name|url)\s*["']?([^"'\s>]+)["']/i);
+    if (urlMatch)
+await loadRecursive(
+    resolve(currentPath, urlMatch[1]),
+    parentBjs, // ← SOLO se non c’è Transform sopra
+    uiParent
+);
 
-        i = earliest + type.length + 2;
+}
+
+
+
+i = earliest + type.length + block.length + 2;
+
     }
 }
 
@@ -250,16 +354,48 @@ function parseVRMLGeometry(t) {
     return { points, indices, uvs: finalUVs };
 }
 
-function createMesh(d, name) {
-    const m = new BABYLON.Mesh(name, scene);
-    const vd = new BABYLON.VertexData();
-    vd.positions = d.points; vd.indices = d.indices; vd.uvs = d.uvs;
-    const norms = []; BABYLON.VertexData.ComputeNormals(d.points, d.indices, norms);
-    vd.normals = norms; vd.applyToMesh(m);
-    m.material = new BABYLON.StandardMaterial("mat_" + Math.random(), scene);
-    m.material.specularColor = new BABYLON.Color3(0, 0, 0);
-    m.material.backFaceCulling = false;
-    return m;
+function createMesh(data, name) {
+    console.log(`🔧 [MESH-DEBUG] Creazione mesh '${name}' con ${data.points.length/3} vertici`);
+
+    const mesh = new BABYLON.Mesh(name, scene);
+
+    // Crea vertex data
+    const vertexData = new BABYLON.VertexData();
+
+    // Punti
+    vertexData.positions = data.points;
+
+    // Indici
+    vertexData.indices = data.indices;
+
+    // UV
+    if (data.uvs && data.uvs.length === (data.points.length / 3 * 2)) {
+        vertexData.uvs = data.uvs;
+        console.log(`📏 [MESH-DEBUG] UV applicate: ${data.uvs.length/2} coordinate`);
+    } else {
+        console.warn(`⚠️ [MESH-WARN] UV non valide o mancanti per ${name}`);
+        // Crea UV default
+        const defaultUVs = new Array(data.points.length / 3 * 2);
+        for (let i = 0; i < defaultUVs.length; i += 2) {
+            defaultUVs[i] = 0;
+            defaultUVs[i+1] = 0;
+        }
+        vertexData.uvs = defaultUVs;
+    }
+
+    // Calcola le normali
+    vertexData.normals = [];
+    BABYLON.VertexData.ComputeNormals(data.points, data.indices, vertexData.normals);
+
+    // Applica i dati
+    vertexData.applyToMesh(mesh, true);
+
+    // Imposta materiale di default
+    const material = new BABYLON.StandardMaterial(name + "_mat", scene);
+    material.specularColor = new BABYLON.Color3(0, 0, 0);
+    mesh.material = material;
+
+    return mesh;
 }
 
 function convertCoords(rawX, rawY, rawZ) {
@@ -374,6 +510,50 @@ async function menuAction(action) {
         document.getElementById("notepad").style.display = "flex";
     }
 }
+
+function convertCoords(rawX, rawY, rawZ) {
+    // Restituiamo il vettore originale senza trasformarlo qui.
+    // La mappatura verrà gestita in tempo reale dal rootNode.
+    return new BABYLON.Vector3(rawX, rawY, rawZ);
+}
+
+function applyMapping() {
+    if (!rootNode) return;
+
+    const getVec = (id) => {
+        const val = document.getElementById(id).value;
+        const s = val.endsWith('+') ? 1 : -1;
+        if (val.startsWith('X')) return new BABYLON.Vector3(s, 0, 0);
+        if (val.startsWith('Y')) return new BABYLON.Vector3(0, s, 0);
+        if (val.startsWith('Z')) return new BABYLON.Vector3(0, 0, s);
+        return BABYLON.Vector3.Zero();
+    };
+
+    const vX = getVec("mapX");
+    const vY = getVec("mapY");
+    const vZ = getVec("mapZ");
+
+    // Creiamo una matrice di rotazione dai tre assi scelti
+    const matrix = BABYLON.Matrix.Identity();
+    matrix.setRowFromFloats(0, vX.x, vX.y, vX.z, 0);
+    matrix.setRowFromFloats(1, vY.x, vY.y, vY.z, 0);
+    matrix.setRowFromFloats(2, vZ.x, vZ.y, vZ.z, 0);
+
+    // Applichiamo la mappatura come "Pre-trasformazione"
+    // Questo permette di cambiare assi senza resettare le rotazioni fatte coi pulsanti
+    rootNode.setPreTransformMatrix(matrix);
+
+    console.log("Mappatura assi applicata in tempo reale.");
+}
+
+// Integriamo la chiamata a applyMapping dentro startAnalysis affinché
+// l'orientamento sia corretto anche al primo caricamento.
+const originalStartAnalysis = startAnalysis;
+startAnalysis = async function() {
+    await originalStartAnalysis();
+    applyMapping();
+};
+
 
 window.onclick = () => document.getElementById("context-menu").style.display = "none";
 function closeNotepad() { document.getElementById("notepad").style.display = "none"; }

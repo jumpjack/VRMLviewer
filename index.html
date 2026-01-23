@@ -9,7 +9,6 @@
     <script src="babylonjs.serializers.min.js"></script>
     <script src="pako.min.js"></script>
     <script src="jszip.min.js"></script>
-
     <link rel="stylesheet" href="vrml-tools.css">
 </head>
 <body>
@@ -20,7 +19,7 @@
     <!-- 1. CARICAMENTO ZIP (Spostato in alto) -->
     <div class="section">
         <label>1. CARICA ZIP</label>
-        <input type="file" id="fileZipLoc" accept=".zip,.wrl,.wrz" onchange="handleFileUpload()" style="width:100%">
+        <input type="file" id="fileZipLoc" accept=".zip,.wrl,.wrz, .iv" onchange="handleFileUpload()" style="width:100%">
     </div>
 
     <!-- AREA INFO FILE (Nuova) -->
@@ -37,9 +36,10 @@
         <div id="progress-bar-wrap"><div id="progress-bar-fill"></div></div>
 
         <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:5px; margin-bottom:10px;">
-            <select id="mapX"><option value="X+">X+</option><option value="X-">X-</option><option value="Y+">Y+</option><option value="Y-">Y-</option><option value="Z+">Z+</option><option value="Z-">Z-</option></select>
-            <select id="mapY"><option value="X+">X+</option><option value="X-">X-</option><option value="Y+">Y+</option><option value="Y-">Y-</option><option value="Z+">Z+</option><option value="Z-">Z-</option></select>
-            <select id="mapZ"><option value="X+">X+</option><option value="X-">X-</option><option value="Y+">Y+</option><option value="Y-">Y-</option><option value="Z+">Z+</option><option value="Z-">Z-</option></select>
+            <!-- Aggiunto onchange="applyMapping()" ai tre selettori seguenti -->
+            <select id="mapX" onchange="applyMapping()"><option value="X+">X+</option><option value="X-">X-</option><option value="Y+">Y+</option><option value="Y-">Y-</option><option value="Z+">Z+</option><option value="Z-">Z-</option></select>
+            <select id="mapY" onchange="applyMapping()"><option value="X+">X+</option><option value="X-">X-</option><option value="Y+">Y+</option><option value="Y-">Y-</option><option value="Z+">Z+</option><option value="Z-">Z-</option></select>
+            <select id="mapZ" onchange="applyMapping()"><option value="X+">X+</option><option value="X-">X-</option><option value="Y+">Y+</option><option value="Y-">Y-</option><option value="Z+">Z+</option><option value="Z-">Z-</option></select>
         </div>
 
         <!-- Pulsanti Rotazione 90° -->
@@ -50,7 +50,10 @@
         </div>
 
         <select id="rootSelect" style="width:100%; margin-top:10px;" onchange="autoDetectVersion()"></select>
-        <button class="btn-main" onclick="startAnalysis()">CARICA E VISUALIZZA</button>
+<div style="display:flex; gap:5px; margin-top:10px;">
+    <button id="btn-start" class="btn-main" onclick="startAnalysis()" style="flex:2">CARICA E VISUALIZZA</button>
+    <button id="btn-stop" class="btn-main" onclick="cancelAnalysis()" style="flex:1; background:#d9534f; display:none;">ANNULLA</button>
+</div>
     </div>
     <div class="section">
         <label>GESTIONE SCENA</label>
@@ -64,6 +67,7 @@
 
     <div class="section" style="display: flex; gap:10px;">
         <button class="btn-export" onclick="exportToGLB()">Esporta GLB</button>
+   <button class="btn-export" style="background:#a52a2a" onclick="exportTiledMarsMap()">Mappa Marte</button>
         <button class="btn-export" style="background:#6f42c1" onclick="exportConfig()">Esporta Config</button>
     </div>
 
@@ -95,9 +99,11 @@
 <canvas id="renderCanvas"></canvas>
 
 <!-- Caricamento Script Principale Separato -->
+<script src="iv-engine.js"></script>
 <script src="vrml-scene.js"></script>
 <script src="vrml-io.js"></script>
 <script src="vrml-engine.js"></script>
+
 
 </body>
 </html>
