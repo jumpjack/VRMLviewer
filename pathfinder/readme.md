@@ -1,8 +1,9 @@
+# Landing site of lander Pathfinder, path of rover Sojourner.
+
 <img width="1292" height="661" alt="image" src="https://github.com/user-attachments/assets/1763248d-c1e2-425f-8218-7eaebcd30e8a" />
 
+Interactive page: [link](https://jumpjack.github.io/VRMLviewer/pathfinder/sojourner-path.html)
 
-
-Landing site of lander Pathfinder, path of rover Sojourner.
 
 Source for Sojourner path:
 
