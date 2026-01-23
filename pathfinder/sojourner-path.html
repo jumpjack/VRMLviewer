@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Sojourner Explorer Pro - Full GLB Control</title>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; background: #111; color: white; overflow: hidden; }
+        #top-bar { background: #222; padding: 10px; display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 2px solid #444; z-index: 100; font-size: 10px; align-items: center; }
+        .group { border: 1px solid #444; padding: 4px 6px; border-radius: 4px; display: flex; align-items: center; gap: 5px; background: #2a2a2a; }
+        .val { color: #ffcc00; font-weight: bold; min-width: 20px; display: inline-block; }
+        input[type="range"] { width: 60px; vertical-align: middle; }
+        #main-layout { display: flex; flex: 1; overflow: hidden; }
+        #panel-2d { width: 45%; background: #222; position: relative; border-right: 1px solid #444; }
+        #panel-3d { width: 55%; background: #eee; position: relative; }
+        canvas, svg { width: 100%; height: 100%; outline: none; }
+        .label { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: #ffcc00; padding: 4px 8px; border-radius: 4px; pointer-events: none; z-index: 10; font-weight: bold; }
+        button { cursor: pointer; padding: 3px 6px; background: #444; color: white; border: 1px solid #666; border-radius: 3px; font-size: 10px; }
+        button.active { background: #ffcc00; color: #000; border-color: #b89600; }
+        .filename-display { color: #888; font-style: italic; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    </style>
+</head>
+<body>
+
+<div id="top-bar">
+    <div class="group">
+        <strong>Rover:</strong>
+        <button id="toggleMode">Slider</button>
+        <span id="sol-label">Sol 2</span>
+        <input type="range" id="sol-slider" min="0" max="30" value="0">
+    </div>
+
+    <div class="group">
+        <strong>Map:</strong>
+        <input type="file" id="imageInput" accept="image/*" style="width: 80px;">
+        <span>X/Y:</span>
+        <input type="range" id="imgX" min="-30" max="30" step="0.1" value="0">
+        <input type="range" id="imgY" min="-30" max="30" step="0.1" value="0">
+        <span>S: <span class="val" id="v-imgScale">20</span></span>
+        <input type="range" id="imgScale" min="1" max="100" step="0.1" value="20">
+        <span>R: <span class="val" id="v-imgRot">0</span>°</span>
+        <input type="range" id="imgRot" min="0" max="360" value="0">
+    </div>
+
+    <div class="group">
+        <strong>GLB:</strong>
+        <input type="file" id="glbInput" accept=".glb,.gltf" style="width: 80px;">
+        <span id="glb-name" class="filename-display">none</span>
+        <button id="glbToggle" class="active">ON</button>
+        <span>Pos(XYZ):</span>
+        <input type="range" id="glbX" min="-50" max="50" step="0.1" value="0">
+        <input type="range" id="glbY" min="-20" max="20" step="0.1" value="0">
+        <input type="range" id="glbZ" min="-50" max="50" step="0.1" value="0">
+        <span>Rot(XYZ):</span>
+        <input type="range" id="glbRotX" min="0" max="360" value="0">
+        <input type="range" id="glbRotY" min="0" max="360" value="0">
+        <input type="range" id="glbRotZ" min="0" max="360" value="0">
+        <span>Scale: <span class="val" id="v-glbScale">10</span></span>
+        <input type="range" id="glbScale" min="0.1" max="100" step="0.1" value="10">
+    </div>
+
+    <div class="group">
+        <button onclick="saveConfig()" style="background:#4a4">Save JSON</button>
+        <button onclick="document.getElementById('configInput').click()" style="background:#555">Load JSON</button>
+        <input type="file" id="configInput" accept=".json" style="display:none" onchange="loadConfig(event)">
+    </div>
+</div>
+
+<div id="main-layout">
+    <div id="panel-2d"><div class="label">2D MAP</div><svg id="svg-map" viewBox="-20 -20 40 40"><defs><pattern id="grid" width="1" height="1" patternUnits="userSpaceOnUse"><path d="M 1 0 L 0 0 0 1" fill="none" stroke="#333" stroke-width="0.05"/></pattern></defs><rect x="-100" y="-100" width="200" height="200" fill="url(#grid)"/><g id="image-layer-2d"></g><line x1="0" y1="-100" x2="0" y2="100" stroke="#444" stroke-width="0.03"/><line x1="-100" y1="0" x2="100" y2="0" stroke="#444" stroke-width="0.03"/><polyline id="path-2d" fill="none" stroke="#ffff00" stroke-width="0.4" stroke-linecap="round" opacity="0.8"/><g id="ghost-group-2d"></g><g id="active-rover-2d"></g></svg></div>
+    <div id="panel-3d"><div class="label">3D VIEW</div><canvas id="renderCanvas"></canvas></div>
+</div>
+
+<script>
+    const data = [{sol:2,x:-.444,y:-.869,z:0,h:155},{sol:3,x:1.587,y:-1.784,z:0,h:150.99},{sol:4,x:1.515,y:-1.98,z:0,h:68.42},{sol:5,x:3.277,y:-2.69,z:0,h:6.82},{sol:6,x:2.99,y:-2.745,z:0,h:188.27},{sol:7,x:4.341,y:-3.278,z:0,h:201},{sol:10,x:3.633,y:-3.647,z:-.1,h:216.36},{sol:11,x:4.335,y:-3.242,z:-.1,h:205.25},{sol:13,x:2.804,y:-1.125,z:0,h:74.7},{sol:14,x:3.578,y:.384,z:0,h:255},{sol:15,x:3.273,y:1.028,z:0,h:337.76},{sol:18,x:3.24,y:.955,z:0,h:294},{sol:20,x:2.856,y:-.711,z:.1,h:191.84},{sol:21,x:3.452,y:-.692,z:.1,h:299},{sol:22,x:3.318,y:-2.602,z:0,h:65.63},{sol:24,x:2.694,y:2.603,z:0,h:71.5},{sol:25,x:.542,y:3.75,z:0,h:270},{sol:26,x:.626,y:3.837,z:0,h:46},{sol:27,x:-2.334,y:4.386,z:.1,h:197},{sol:28,x:-5.423,y:2.847,z:.2,h:354.24},{sol:29,x:-5.612,y:2.847,z:.2,h:358.2},{sol:32,x:-6.024,y:2.778,z:.1,h:4.9},{sol:33,x:-8.562,y:-.091,z:0,h:197},{sol:35,x:-5.907,y:-.062,z:0,h:341.22},{sol:36,x:-3.498,y:-.885,z:0,h:91.95},{sol:37,x:-3.448,y:-.837,z:0,h:178.3},{sol:39,x:-3.419,y:-.973,z:0,h:45.67},{sol:52,x:-5.35,y:-2.892,z:-.1,h:54.9},{sol:64,x:-4.896,y:-3.833,z:-.2,h:87.49},{sol:74,x:-8.932,y:-1.566,z:-.1,h:254.91},{sol:79,x:-8.865,y:-2.108,z:0,h:65.1}];
+
+    let imgRatio = 1, extraGLB = null, glbVisible = true, currentGlbName = "none";
+    const canvas = document.getElementById("renderCanvas"), engine = new BABYLON.Engine(canvas, true);
+    const scene = new BABYLON.Scene(engine); scene.clearColor = new BABYLON.Color4(0.15, 0.15, 0.15, 1);
+    const camera = new BABYLON.ArcRotateCamera("cam", -Math.PI/2, Math.PI/3, 25, new BABYLON.Vector3(-5,0,0), scene);
+    camera.attachControl(canvas, true); new BABYLON.HemisphericLight("l", new BABYLON.Vector3(0,1,0), scene);
+
+    function createRover(name, color, isGhost) {
+        const root = new BABYLON.TransformNode(name);
+        const body = BABYLON.MeshBuilder.CreateBox("b", {width:0.48, height:0.15, depth:0.65}, scene);
+        body.parent = root; body.position.y = 0.2;
+        const mat = new BABYLON.StandardMaterial("m", scene); mat.diffuseColor = color; if(isGhost) mat.alpha = 0.3; body.material = mat;
+        const nose = BABYLON.MeshBuilder.CreateCylinder("n", {diameterTop:0, diameterBottom:0.3, height:0.4, tessellation:3}, scene);
+        nose.parent = root; nose.rotation.x = Math.PI/2; nose.position.z = 0.4; nose.position.y = 0.2;
+        const nMat = new BABYLON.StandardMaterial("nm", scene); nMat.diffuseColor = new BABYLON.Color3(1,1,1); if(isGhost) nMat.alpha = 0.3; nose.material = nMat;
+        [{x:0.3,z:0.25},{x:0.3,z:0},{x:0.3,z:-0.25},{x:-0.3,z:0.25},{x:-0.3,z:0},{x:-0.3,z:-0.25}].forEach((w,i)=>{
+            const wheel = BABYLON.MeshBuilder.CreateCylinder("w"+i, {diameter:0.13, height:0.1}, scene);
+            wheel.parent = root; wheel.rotation.z = Math.PI/2; wheel.position.set(w.x, 0.06, w.z);
+            const wMat = new BABYLON.StandardMaterial("wm", scene); wMat.diffuseColor = new BABYLON.Color3(0.1,0.1,0.1); if(isGhost) wMat.alpha = 0.3; wheel.material = wMat;
+        });
+        return root;
+    }
+
+    const activeRover3D = createRover("active", new BABYLON.Color3(0,0.8,0), false);
+    const pathPoints = data.map(p => new BABYLON.Vector3(p.y, p.z, p.x));
+    const path3D = BABYLON.MeshBuilder.CreateTube("p3", {path: pathPoints, radius: 0.12, sideOrientation: BABYLON.Mesh.DOUBLESIDE}, scene);
+    const pathMat = new BABYLON.StandardMaterial("pm", scene); pathMat.diffuseColor = new BABYLON.Color3(1,1,0); pathMat.emissiveColor = new BABYLON.Color3(0.4,0.4,0); path3D.material = pathMat;
+    const ghosts3D = data.map((p,i) => { const g = createRover("g"+i, new BABYLON.Color3(0.2,0.4,0.8), true); g.position.set(p.y, p.z, p.x); g.rotation.y = (p.h * Math.PI)/180; g.setEnabled(false); return g; });
+    const ground3D = BABYLON.MeshBuilder.CreatePlane("ground", {size: 1}, scene); ground3D.rotation.x = Math.PI/2; ground3D.position.y = -0.15;
+    const groundMat = new BABYLON.StandardMaterial("gm", scene); groundMat.specularColor = new BABYLON.Color3(0,0,0); ground3D.material = groundMat; ground3D.setEnabled(false);
+
+    function update() {
+        const x = parseFloat(document.getElementById('imgX').value), y = parseFloat(document.getElementById('imgY').value);
+        const s = parseFloat(document.getElementById('imgScale').value), r = parseFloat(document.getElementById('imgRot').value);
+        document.getElementById('v-imgScale').innerText = s; document.getElementById('v-imgRot').innerText = r;
+        ground3D.position.x = x; ground3D.position.z = y; ground3D.scaling = new BABYLON.Vector3(s * imgRatio, s, 1); ground3D.rotation.y = -(r * Math.PI)/180;
+        const svgImg = document.getElementById('svgImage');
+        if(svgImg) {
+            const sw = s * imgRatio; svgImg.setAttribute("width", sw); svgImg.setAttribute("height", s); svgImg.setAttribute("x", -sw/2); svgImg.setAttribute("y", -s/2);
+            document.getElementById('image-layer-2d').setAttribute("transform", `translate(${x}, ${-y}) rotate(${-r})`);
+        }
+        if(extraGLB) {
+            const gx = parseFloat(document.getElementById('glbX').value), gy = parseFloat(document.getElementById('glbY').value), gz = parseFloat(document.getElementById('glbZ').value);
+            const grx = parseFloat(document.getElementById('glbRotX').value), gry = parseFloat(document.getElementById('glbRotY').value), grz = parseFloat(document.getElementById('glbRotZ').value);
+            const gs = parseFloat(document.getElementById('glbScale').value);
+            document.getElementById('v-glbScale').innerText = gs;
+            extraGLB.position.set(gx, gy, gz); extraGLB.scaling.set(gs, gs, gs);
+            extraGLB.rotationQuaternion = BABYLON.Quaternion.RotationYawPitchRoll(gry*Math.PI/180, grx*Math.PI/180, grz*Math.PI/180);
+            extraGLB.setEnabled(glbVisible);
+        }
+        const idx = parseInt(document.getElementById('sol-slider').value), p = data[idx];
+        document.getElementById('sol-label').innerText = "Sol " + p.sol;
+        activeRover3D.position.set(p.y, p.z, p.x); activeRover3D.rotation.y = (p.h * Math.PI)/180;
+        const active2D = document.getElementById('active-rover-2d'); active2D.setAttribute("transform", `translate(${p.y}, ${-p.x}) rotate(${p.h})`);
+        active2D.innerHTML = `<rect x="-0.25" y="-0.35" width="0.5" height="0.7" fill="#0ff00" rx="0.05"/><polygon points="0,-0.4 -0.15,-0.1 0.15,-0.1" fill="white"/>`;
+        const isAll = document.getElementById('toggleMode').classList.contains('active');
+        activeRover3D.setEnabled(!isAll); active2D.style.display = isAll ? "none" : "block";
+        ghosts3D.forEach(g => g.setEnabled(isAll)); document.getElementById('ghost-group-2d').style.display = isAll ? "block" : "none";
+    }
+
+    document.getElementById('imageInput').onchange = (e) => {
+        const file = e.target.files[0]; if(!file) return;
+        const reader = new FileReader(); reader.onload = (ev) => {
+            const url = ev.target.result, tempImg = new Image();
+            tempImg.onload = () => { imgRatio = tempImg.width / tempImg.height; document.getElementById('image-layer-2d').innerHTML = `<image id="svgImage" href="${url}" />`; const tex = new BABYLON.Texture(url, scene); groundMat.diffuseTexture = tex; groundMat.diffuseTexture.hasAlpha = true; ground3D.setEnabled(true); update(); };
+            tempImg.src = url;
+        }; reader.readAsDataURL(file);
+    };
+
+    document.getElementById('glbInput').onchange = (e) => {
+        const file = e.target.files[0]; if(!file) return;
+        currentGlbName = file.name; document.getElementById('glb-name').innerText = currentGlbName;
+        const url = URL.createObjectURL(file);
+        BABYLON.SceneLoader.ImportMesh("", "", url, scene, (meshes) => {
+            if(extraGLB) extraGLB.dispose();
+            extraGLB = new BABYLON.Mesh("glbRoot", scene); meshes.forEach(m => m.parent = extraGLB); update();
+        }, null, null, ".glb");
+    };
+
+    document.getElementById('glbToggle').onclick = function() { glbVisible = !glbVisible; this.innerText = glbVisible ? "ON" : "OFF"; this.classList.toggle('active'); update(); };
+    document.getElementById('toggleMode').onclick = function() { this.classList.toggle('active'); this.innerText = this.classList.contains('active') ? "Tutti" : "Slider"; update(); };
+    ['imgX','imgY','imgScale','imgRot','sol-slider','glbX','glbY','glbZ','glbRotX','glbRotY','glbRotZ','glbScale'].forEach(id => document.getElementById(id).oninput = update);
+
+    function saveConfig() {
+        const config = {
+            img:{x:document.getElementById('imgX').value,y:document.getElementById('imgY').value,s:document.getElementById('imgScale').value,r:document.getElementById('imgRot').value},
+            glb:{x:document.getElementById('glbX').value,y:document.getElementById('glbY').value,z:document.getElementById('glbZ').value,rx:document.getElementById('glbRotX').value,ry:document.getElementById('glbRotY').value,rz:document.getElementById('glbRotZ').value,s:document.getElementById('glbScale').value,on:glbVisible,file:currentGlbName},
+            sol:document.getElementById('sol-slider').value
+        };
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(config, null, 2)], {type:'application/json'})); a.download = 'sojourner_config.json'; a.click();
+    }
+
+    function loadConfig(event) {
+        const file = event.target.files[0]; if(!file) return;
+        const reader = new FileReader(); reader.onload = (e) => {
+            const c = JSON.parse(e.target.result);
+            document.getElementById('imgX').value = c.img.x; document.getElementById('imgY').value = c.img.y; document.getElementById('imgScale').value = c.img.s; document.getElementById('imgRot').value = c.img.r;
+            document.getElementById('glbX').value = c.glb.x; document.getElementById('glbY').value = c.glb.y; document.getElementById('glbZ').value = c.glb.z;
+            document.getElementById('glbRotX').value = c.glb.rx; document.getElementById('glbRotY').value = c.glb.ry; document.getElementById('glbRotZ').value = c.glb.rz;
+            document.getElementById('glbScale').value = c.glb.s; glbVisible = c.glb.on; currentGlbName = c.glb.file || "none";
+            document.getElementById('glb-name').innerText = currentGlbName;
+            document.getElementById('glbToggle').innerText = glbVisible ? "ON" : "OFF";
+            if(glbVisible) document.getElementById('glbToggle').classList.add('active'); else document.getElementById('glbToggle').classList.remove('active');
+            document.getElementById('sol-slider').value = c.sol; update();
+        }; reader.readAsText(file);
+    }
+
+    let pStr = ""; data.forEach(p => { pStr += `${p.y},${-p.x} `; const c = document.createElementNS("http://www.w3.org/2000/svg", "circle"); c.setAttribute("cx", p.y); c.setAttribute("cy", -p.x); c.setAttribute("r", 0.15); c.setAttribute("fill", "#ffff00"); c.setAttribute("opacity", "0.5"); document.getElementById('ghost-group-2d').appendChild(c); });
+    document.getElementById('path-2d').setAttribute("points", pStr);
+    update(); engine.runRenderLoop(() => scene.render()); window.onresize = () => engine.resize();
+</script>
+</body>
+</html>
